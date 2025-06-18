@@ -49,10 +49,22 @@ namespace GameStatistic
 
             var attacker = @event.Attacker;
             var victim = @event.Userid;
+            var assister = @event.Assister;
 
             if (victim is null || attacker is null || victim.AuthorizedSteamID is null || attacker.AuthorizedSteamID is null || attacker.IsBot || victim.IsBot)
             {
                 return HookResult.Continue;
+            }
+
+            if (assister is not null && assister.AuthorizedSteamID != null && attacker != victim)
+            {
+                var steamId = victim.AuthorizedSteamID.SteamId2;
+                if (!_statisticEntries.ContainsKey(steamId))
+                {
+                    _statisticEntries[steamId] = new StatisticEntry(steamId, victim.PlayerName);
+                }
+
+                _statisticEntries[steamId].Assister++;
             }
 
             if (victim.AuthorizedSteamID != null && attacker != victim)
@@ -60,7 +72,7 @@ namespace GameStatistic
                 var steamId = victim.AuthorizedSteamID.SteamId2;
                 if (!_statisticEntries.ContainsKey(steamId))
                 {
-                    _statisticEntries[steamId] = new StatisticEntry(steamId, victim.PlayerName, 0, 0, 0);
+                    _statisticEntries[steamId] = new StatisticEntry(steamId, victim.PlayerName);
                 }
 
                 _statisticEntries[steamId].Dead++;
@@ -71,17 +83,24 @@ namespace GameStatistic
                 var steamId = attacker.AuthorizedSteamID.SteamId2;
                 if (!_statisticEntries.ContainsKey(steamId))
                 {
-                    _statisticEntries[steamId] = new StatisticEntry(steamId, attacker.PlayerName, 0, 0, 0);
+                    _statisticEntries[steamId] = new StatisticEntry(steamId, attacker.PlayerName);
                 }
-                _statisticEntries[steamId].Kill++;
+                if (attacker.JustDidTeamKill)
+                {
+                    _statisticEntries[steamId].TeamKill++;
+                }
+                else
+                {
+                    _statisticEntries[steamId].Kill++;
+                }
             }
 
-            if (attacker?.AuthorizedSteamID != null && attacker == victim)
+            if (attacker?.AuthorizedSteamID != null && attacker == victim && !attacker.JustBecameSpectator)
             {
                 var steamId = attacker.AuthorizedSteamID.SteamId2;
                 if (!_statisticEntries.ContainsKey(steamId))
                 {
-                    _statisticEntries[steamId] = new StatisticEntry(steamId, attacker.PlayerName, 0, 0, 0);
+                    _statisticEntries[steamId] = new StatisticEntry(steamId, attacker.PlayerName, 0, 0, 0, 0);
                 }
                 _statisticEntries[steamId].SelfKill++;
             }
