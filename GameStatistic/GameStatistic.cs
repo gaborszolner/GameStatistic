@@ -132,7 +132,9 @@ namespace GameStatistic
                 {
                     existing.Kill += kvp.Value.Kill;
                     existing.Dead += kvp.Value.Dead;
+                    existing.Assister += kvp.Value.Assister;
                     existing.SelfKill += kvp.Value.SelfKill;
+                    existing.TeamKill += kvp.Value.TeamKill;
                 }
             }
 
