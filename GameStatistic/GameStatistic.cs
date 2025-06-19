@@ -85,7 +85,7 @@ namespace GameStatistic
                 {
                     _statisticEntries[steamId] = new StatisticEntry(steamId, attacker.PlayerName);
                 }
-                if (attacker.JustDidTeamKill)
+                if (attacker.Team == victim.Team)
                 {
                     _statisticEntries[steamId].TeamKill++;
                 }
@@ -95,7 +95,7 @@ namespace GameStatistic
                 }
             }
 
-            if (attacker?.AuthorizedSteamID != null && attacker == victim && !attacker.JustBecameSpectator)
+            if (attacker?.AuthorizedSteamID != null && attacker == victim && !attacker.JustBecameSpectator && !attacker.TeamChanged)
             {
                 var steamId = attacker.AuthorizedSteamID.SteamId2;
                 if (!_statisticEntries.ContainsKey(steamId))
