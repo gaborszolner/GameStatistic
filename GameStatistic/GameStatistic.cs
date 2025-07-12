@@ -40,10 +40,11 @@ namespace GameStatistic
                 return HookResult.Continue;
             }
 
-            var storedStats = CreateMapStatistic(_mapStatFilePath);
+            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
             _mapStatEntry = new KeyValuePair<string, MapStatEntry>(mapName, new MapStatEntry(mapName));
             _mapStatEntry.Value.StartedRound++;
-            WriteToFile(storedStats, _mapStatEntry);
+            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
+            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
             _mapStatEntry.Value.StartedRound = 0;
             return HookResult.Continue;
         }
@@ -51,9 +52,9 @@ namespace GameStatistic
         private HookResult OnMapShutdown(EventMapShutdown @event, GameEventInfo info)
         {
             _mapStatEntry.Value.Rtv++;
-            var storedStats = CreateMapStatistic(_mapStatFilePath);
-            WriteToFile(storedStats, _mapStatEntry);
-
+            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
+            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
+            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
             return HookResult.Continue;
         }
 
@@ -146,7 +147,7 @@ namespace GameStatistic
 
         private static void CreateMapStatisticRoundEnd(int winnerTeam)
         {
-            var storedStats = CreateMapStatistic(_mapStatFilePath);
+            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
 
             if (winnerTeam == 2)
             {
@@ -157,14 +158,15 @@ namespace GameStatistic
                 _mapStatEntry.Value.CTWin++;
             }
 
-            WriteToFile(storedStats, _mapStatEntry);
+            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
+            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
         }
 
-        private static void WriteToFile(Dictionary<string, MapStatEntry> storedStats, KeyValuePair<string, MapStatEntry> mapStatEntry)
+        private static Dictionary<string, MapStatEntry>? MergeStatToStored(Dictionary<string, MapStatEntry> storedStats, KeyValuePair<string, MapStatEntry> mapStatEntry)
         {
             if (string.IsNullOrWhiteSpace(mapStatEntry.Key))
             {
-                return;
+                return null;
             }
 
             if (storedStats.ContainsKey(mapStatEntry.Key))
@@ -175,86 +177,78 @@ namespace GameStatistic
                 existing.PlayedRound += mapStatEntry.Value.PlayedRound;
                 existing.Rtv += mapStatEntry.Value.Rtv;
             }
-            else 
+            else
             {
                 storedStats[mapStatEntry.Key] = mapStatEntry.Value;
             }
 
-                try
-                {
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    File.WriteAllText(_mapStatFilePath, JsonSerializer.Serialize(storedStats, options));
-                }
-                catch (Exception)
-                { }
+            return storedStats;
+        }
+
+        private static void FileWriteAll<T>(string statFilePath, T? storedStats)
+        {
+            if (storedStats is null) 
+            {
+                return;
+            }
+
+            try
+            {
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(statFilePath, JsonSerializer.Serialize(storedStats, options));
+            }
+            catch (Exception)
+            { }
         }
 
         private void CreatePlayerStatistic()
         {
-            var storedStats = CreatePlayerStatistic(_playerStatFilePath);
+            var storedStats = ReadStoredStat<Dictionary<string, PlayerStatEntry>>(_playerStatFilePath);
 
             foreach (var kvp in _playerStatEntries)
             {
-                if (!storedStats.TryGetValue(kvp.Key, out var existing))
+                if (storedStats.ContainsKey(kvp.Key))
                 {
-                    storedStats[kvp.Key] = kvp.Value;
-                }
-                else
-                {
+                    var existing = storedStats[kvp.Key];
                     existing.Kill += kvp.Value.Kill;
                     existing.Dead += kvp.Value.Dead;
                     existing.Assister += kvp.Value.Assister;
                     existing.SelfKill += kvp.Value.SelfKill;
                     existing.TeamKill += kvp.Value.TeamKill;
                 }
+                else
+                {
+                    storedStats[kvp.Key] = kvp.Value;
+                }
             }
 
-            try
-            {
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(_playerStatFilePath, JsonSerializer.Serialize(storedStats, options));
-            }
-            catch (Exception ex)
-            {
-                Logger?.LogError($"Failed to save stats file: {ex.Message}");
-            }
+            FileWriteAll(_playerStatFilePath, storedStats);
 
             _playerStatEntries.Clear();
         }
 
-        private static Dictionary<string, MapStatEntry> CreateMapStatistic(string filePath)
+        private static T ReadStoredStat<T>(string filePath)
         {
-            Dictionary<string, MapStatEntry> storedStats = new();
-
-            if (File.Exists(_mapStatFilePath))
+            T storedStats = default;
+            if (File.Exists(filePath))
             {
-                string json = File.ReadAllText(_mapStatFilePath);
-                storedStats = JsonSerializer.Deserialize<Dictionary<string, MapStatEntry>>(json) ?? [];
+                string json = File.ReadAllText(filePath);
+
+                var deserialized = JsonSerializer.Deserialize<T>(json);
+
+                if (deserialized is not null)
+                {
+                    storedStats = deserialized;
+                }
             }
             else
             {
-                File.WriteAllText(_mapStatFilePath, "{}");
+                File.WriteAllText(filePath, "{}");
             }
 
             return storedStats;
         }
 
-        private static Dictionary<string, PlayerStatEntry> CreatePlayerStatistic(string filePath)
-        {
-            Dictionary<string, PlayerStatEntry> storedStats = new();
-
-            if (File.Exists(_playerStatFilePath))
-            {
-                string json = File.ReadAllText(_playerStatFilePath);
-                storedStats = JsonSerializer.Deserialize<Dictionary<string, PlayerStatEntry>>(json) ?? [];
-            }
-            else
-            {
-                File.WriteAllText(_playerStatFilePath, "{}");
-            }
-
-            return storedStats;
-        }
 
     }
 }
