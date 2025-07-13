@@ -2,36 +2,21 @@
 
 namespace GameStatistic
 {
-    internal class MapStatEntry
+    internal class MapStatEntry(string name, int tWin = 0, int ctWin = 0, int mapStarted = 0, int mapFullPlayed = 0)
     {
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string Name { get; set; } = name;
 
         [JsonPropertyName("tWin")]
-        public int TtWin { get; set; }
+        public int TtWin { get; set; } = tWin;
 
         [JsonPropertyName("ctWin")]
-        public int CTWin { get; set; }
+        public int CTWin { get; set; } = ctWin;
 
-        [JsonPropertyName("startedRound")]
-        public int StartedRound { get; set; }
+        [JsonPropertyName("mapStarted")]
+        public int MapStarted { get; set; } = mapStarted;
 
-        [JsonPropertyName("playedRound")]
-        public int PlayedRound { get; set; }
-
-        [JsonPropertyName("rtv")]
-        public int Rtv { get; set; }
-
-        public MapStatEntry(string name, int tWin = 0, int ctWin = 0, int startedRound = 0, int playedRound = 0, int rtv = 0)
-        {
-            Name = name;
-            TtWin = tWin;
-            CTWin = ctWin;
-            StartedRound = startedRound;
-            PlayedRound = playedRound;
-            Rtv = rtv;
-        }
-
-        public MapStatEntry() { }
+        [JsonPropertyName("mapFullPlayed")]
+        public int MapFullPlayed { get; set; } = mapFullPlayed;
     }
 }

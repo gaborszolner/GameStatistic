@@ -20,20 +20,31 @@ namespace GameStatistic
         private static Dictionary<string, PlayerStatEntry> _playerStatEntries = new();
         private static KeyValuePair<string, MapStatEntry> _mapStatEntry;
         private static bool _isWarmup = false;
+        private static bool _isRoundEnded = false;
         public override void Load(bool hotReload)
         {
             RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
             RegisterEventHandler<EventRoundStart>(OnRoundStart);
             RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath);
             RegisterEventHandler<EventWarmupEnd>(OnWarmupEnd);
-            RegisterEventHandler<EventMapShutdown>(OnMapShutdown);
+            RegisterEventHandler<EventGameEnd>(OnGameEnd);
             RegisterEventHandler<EventRoundAnnounceWarmup>(OnRoundAnnounceWarmup);
             _playerStatFilePath = Path.Combine(ModuleDirectory, "playerStatistic.json");
             _mapStatFilePath = Path.Combine(ModuleDirectory, "mapStatistic.json");
         }
 
+        private HookResult OnGameEnd(EventGameEnd @event, GameEventInfo info)
+        {
+            _mapStatEntry.Value.MapFullPlayed++;
+            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
+            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
+            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
+            return HookResult.Continue;
+        }
+
         private HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
         {
+            _isRoundEnded = false;
             string? mapName = Server.MapName?.Trim();
             if (string.IsNullOrWhiteSpace(mapName))
             {
@@ -42,19 +53,10 @@ namespace GameStatistic
 
             var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
             _mapStatEntry = new KeyValuePair<string, MapStatEntry>(mapName, new MapStatEntry(mapName));
-            _mapStatEntry.Value.StartedRound++;
+            _mapStatEntry.Value.MapStarted++;
             storedStats = MergeStatToStored(storedStats, _mapStatEntry);
             FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
-            _mapStatEntry.Value.StartedRound = 0;
-            return HookResult.Continue;
-        }
-
-        private HookResult OnMapShutdown(EventMapShutdown @event, GameEventInfo info)
-        {
-            _mapStatEntry.Value.Rtv++;
-            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
-            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
-            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
+            _mapStatEntry.Value.MapStarted = 0;
             return HookResult.Continue;
         }
 
@@ -72,7 +74,7 @@ namespace GameStatistic
 
         private HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
         {
-            if(_isWarmup)
+            if(_isWarmup || _isRoundEnded)
             {
                 return HookResult.Continue;
             }
@@ -140,6 +142,7 @@ namespace GameStatistic
 
         private HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
         {
+            _isRoundEnded = true;
             CreatePlayerStatistic();
             CreateMapStatisticRoundEnd(@event.Winner);
             return HookResult.Continue;
@@ -162,20 +165,21 @@ namespace GameStatistic
             FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
         }
 
-        private static Dictionary<string, MapStatEntry>? MergeStatToStored(Dictionary<string, MapStatEntry> storedStats, KeyValuePair<string, MapStatEntry> mapStatEntry)
+        private static Dictionary<string, MapStatEntry>? MergeStatToStored(Dictionary<string, MapStatEntry>? storedStats, KeyValuePair<string, MapStatEntry> mapStatEntry)
         {
             if (string.IsNullOrWhiteSpace(mapStatEntry.Key))
             {
                 return null;
             }
 
+            storedStats ??= [];
+
             if (storedStats.ContainsKey(mapStatEntry.Key))
             {
                 var existing = storedStats[mapStatEntry.Key];
                 existing.TtWin += mapStatEntry.Value.TtWin;
                 existing.CTWin += mapStatEntry.Value.CTWin;
-                existing.PlayedRound += mapStatEntry.Value.PlayedRound;
-                existing.Rtv += mapStatEntry.Value.Rtv;
+                existing.MapFullPlayed += mapStatEntry.Value.MapFullPlayed;
             }
             else
             {
@@ -203,7 +207,9 @@ namespace GameStatistic
 
         private void CreatePlayerStatistic()
         {
-            var storedStats = ReadStoredStat<Dictionary<string, PlayerStatEntry>>(_playerStatFilePath);
+            var storedStats =
+                ReadStoredStat<Dictionary<string, PlayerStatEntry>>(_playerStatFilePath) 
+                ?? [];
 
             foreach (var kvp in _playerStatEntries)
             {
@@ -227,9 +233,9 @@ namespace GameStatistic
             _playerStatEntries.Clear();
         }
 
-        private static T ReadStoredStat<T>(string filePath)
+        private static T? ReadStoredStat<T>(string filePath)
         {
-            T storedStats = default;
+            T? storedStats = default;
             if (File.Exists(filePath))
             {
                 string json = File.ReadAllText(filePath);
