@@ -8,7 +8,7 @@ namespace GameStatistic
         public string Name { get; set; }
 
         [JsonPropertyName("tWin")]
-        public int TtWin { get; set; }
+        public int TWin { get; set; }
 
         [JsonPropertyName("ctWin")]
         public int CTWin { get; set; }
@@ -23,7 +23,7 @@ namespace GameStatistic
         public MapStatEntry(string name, int tWin = 0, int ctWin = 0, int mapStarted = 0, int mapFullPlayed = 0)
         {
             Name = name;
-            TtWin = tWin;
+            TWin = tWin;
             CTWin = ctWin;
             MapStarted = mapStarted;
             MapFullPlayed = mapFullPlayed;

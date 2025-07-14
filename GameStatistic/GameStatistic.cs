@@ -1,6 +1,8 @@
 ﻿using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
+using System.Drawing;
 using System.Text.Json;
 
 namespace GameStatistic
@@ -27,13 +29,13 @@ namespace GameStatistic
             RegisterEventHandler<EventRoundStart>(OnRoundStart);
             RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath);
             RegisterEventHandler<EventWarmupEnd>(OnWarmupEnd);
-            RegisterEventHandler<EventGameEnd>(OnGameEnd);
+            RegisterEventHandler<EventRoundAnnounceFinal>(OnRoundAnnounceFinal);
             RegisterEventHandler<EventRoundAnnounceWarmup>(OnRoundAnnounceWarmup);
             _playerStatFilePath = Path.Combine(ModuleDirectory, "playerStatistic.json");
             _mapStatFilePath = Path.Combine(ModuleDirectory, "mapStatistic.json");
         }
 
-        private HookResult OnGameEnd(EventGameEnd @event, GameEventInfo info)
+        private HookResult OnRoundAnnounceFinal(EventRoundAnnounceFinal @event, GameEventInfo info)
         {
             _mapStatEntry.Value.MapFullPlayed++;
             var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
@@ -63,6 +65,20 @@ namespace GameStatistic
         private HookResult OnRoundAnnounceWarmup(EventRoundAnnounceWarmup @event, GameEventInfo info)
         {
             _isWarmup = true;
+
+            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
+            if(storedStats is not null && storedStats.ContainsKey(Server.MapName.Trim())) 
+            { 
+                int ctWin = storedStats[Server.MapName.Trim()].CTWin;
+                int tWin = storedStats[Server.MapName.Trim()].TWin;
+                int fullRoundCount = ctWin + tWin;
+
+                double tWinPercentage = (double)tWin / fullRoundCount * 100;
+                double ctWinPercentage = (double)ctWin / fullRoundCount * 100;
+
+                Server.PrintToChatAll($"{ChatColors.Yellow}{PluginPrefix} {ChatColors.Default}- On this map {ChatColors.Red} T win: {tWinPercentage:F2}%, {ChatColors.Blue}CT win: {ctWinPercentage:F2}%");
+            }
+
             return HookResult.Continue;
         }
 
@@ -154,7 +170,7 @@ namespace GameStatistic
 
             if (winnerTeam == 2)
             {
-                _mapStatEntry.Value.TtWin++;
+                _mapStatEntry.Value.TWin++;
             }
             else if (winnerTeam == 3)
             {
@@ -177,7 +193,7 @@ namespace GameStatistic
             if (storedStats.ContainsKey(mapStatEntry.Key))
             {
                 var existing = storedStats[mapStatEntry.Key];
-                existing.TtWin += mapStatEntry.Value.TtWin;
+                existing.TWin += mapStatEntry.Value.TWin;
                 existing.CTWin += mapStatEntry.Value.CTWin;
                 existing.MapFullPlayed += mapStatEntry.Value.MapFullPlayed;
             }
