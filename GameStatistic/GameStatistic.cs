@@ -23,6 +23,7 @@ namespace GameStatistic
         private static KeyValuePair<string, MapStatEntry> _mapStatEntry;
         private static bool _isWarmup = false;
         private static bool _isRoundEnded = false;
+        private static string _mapName;
         public override void Load(bool hotReload)
         {
             RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
@@ -30,53 +31,62 @@ namespace GameStatistic
             RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath);
             RegisterEventHandler<EventWarmupEnd>(OnWarmupEnd);
             RegisterEventHandler<EventRoundAnnounceFinal>(OnRoundAnnounceFinal);
+            RegisterEventHandler<EventRoundAnnounceMatchStart>(OnRoundAnnounceMatchStart);
             RegisterEventHandler<EventRoundAnnounceWarmup>(OnRoundAnnounceWarmup);
             _playerStatFilePath = Path.Combine(ModuleDirectory, "playerStatistic.json");
             _mapStatFilePath = Path.Combine(ModuleDirectory, "mapStatistic.json");
+        }
+
+        private HookResult OnRoundAnnounceMatchStart(EventRoundAnnounceMatchStart @event, GameEventInfo info)
+        {
+            _mapName = Server.MapName.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(_mapName))
+            {
+                return HookResult.Continue;
+            }
+
+            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
+            _mapStatEntry = new KeyValuePair<string, MapStatEntry>(_mapName, new MapStatEntry(_mapName));
+            _mapStatEntry.Value.MapStarted++;
+            MergeStatToStored(storedStats, _mapStatEntry);
+            _mapStatEntry.Value.MapStarted = 0;
+            return HookResult.Continue;
         }
 
         private HookResult OnRoundAnnounceFinal(EventRoundAnnounceFinal @event, GameEventInfo info)
         {
             _mapStatEntry.Value.MapFullPlayed++;
             var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
-            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
-            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
+            MergeStatToStored(storedStats, _mapStatEntry);
+            _mapStatEntry.Value.MapFullPlayed = 0;
             return HookResult.Continue;
         }
 
         private HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
         {
             _isRoundEnded = false;
-            string? mapName = Server.MapName?.Trim();
-            if (string.IsNullOrWhiteSpace(mapName))
-            {
-                return HookResult.Continue;
-            }
-
-            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
-            _mapStatEntry = new KeyValuePair<string, MapStatEntry>(mapName, new MapStatEntry(mapName));
-            _mapStatEntry.Value.MapStarted++;
-            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
-            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
-            _mapStatEntry.Value.MapStarted = 0;
             return HookResult.Continue;
         }
 
         private HookResult OnRoundAnnounceWarmup(EventRoundAnnounceWarmup @event, GameEventInfo info)
         {
             _isWarmup = true;
-
+            _mapName = Server.MapName.Trim() ?? string.Empty;
             var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
-            if(storedStats is not null && storedStats.ContainsKey(Server.MapName.Trim())) 
+            if(storedStats is not null && storedStats.ContainsKey(_mapName)) 
             { 
-                int ctWin = storedStats[Server.MapName.Trim()].CTWin;
-                int tWin = storedStats[Server.MapName.Trim()].TWin;
+                int ctWin = storedStats[_mapName].CTWin;
+                int tWin = storedStats[_mapName].TWin;
                 int fullRoundCount = ctWin + tWin;
 
                 double tWinPercentage = (double)tWin / fullRoundCount * 100;
                 double ctWinPercentage = (double)ctWin / fullRoundCount * 100;
 
-                Server.PrintToChatAll($"{ChatColors.Yellow}{PluginPrefix} {ChatColors.Default}- On this map {ChatColors.Red} T win: {tWinPercentage:F2}%, {ChatColors.Blue}CT win: {ctWinPercentage:F2}%");
+                int mapStarted = storedStats[_mapName].MapStarted;
+                int mapFullPlayed = storedStats[_mapName].MapFullPlayed;
+                double rtvPercentage = (double)mapFullPlayed / mapStarted * 100;
+
+                Server.PrintToChatAll($"{ChatColors.Yellow}{PluginPrefix} {ChatColors.Default}- On this map {ChatColors.Red} T win: {tWinPercentage:F2}%, {ChatColors.Blue}CT win: {ctWinPercentage:F2}%, {ChatColors.Green}RTV in {rtvPercentage:F2}%");
             }
 
             return HookResult.Continue;
@@ -104,53 +114,61 @@ namespace GameStatistic
                 return HookResult.Continue;
             }
 
-            if (assister is not null && assister.AuthorizedSteamID != null)
-            {
-                var steamId = victim.AuthorizedSteamID.SteamId2;
-                if (!_playerStatEntries.ContainsKey(steamId))
-                {
-                    _playerStatEntries[steamId] = new PlayerStatEntry(steamId, victim.PlayerName);
-                }
+            var attackerSteamId = attacker.AuthorizedSteamID.SteamId2;
+            var victimSteamId = victim.AuthorizedSteamID.SteamId2;
+            var assisterSteamId = assister?.AuthorizedSteamID?.SteamId2;
 
-                _playerStatEntries[steamId].Assister++;
+            if (assister is not null && assister.AuthorizedSteamID is not null && assisterSteamId is not null)
+            {
+                if (!_playerStatEntries.ContainsKey(assisterSteamId))
+                {
+                    _playerStatEntries[assisterSteamId] = new PlayerStatEntry(assisterSteamId, victim.PlayerName);
+                }
+                _playerStatEntries[assisterSteamId].Assister++;
             }
 
-            if (victim.AuthorizedSteamID != null && attacker != victim)
+            if (attackerSteamId is not null && victimSteamId is not null && attackerSteamId != victimSteamId)
             {
-                var steamId = victim.AuthorizedSteamID.SteamId2;
-                if (!_playerStatEntries.ContainsKey(steamId))
+                if (!_playerStatEntries.ContainsKey(victimSteamId))
                 {
-                    _playerStatEntries[steamId] = new PlayerStatEntry(steamId, victim.PlayerName);
+                    _playerStatEntries[victimSteamId] = new PlayerStatEntry(victimSteamId, victim.PlayerName);
                 }
+                _playerStatEntries[victimSteamId].Dead++;
 
-                _playerStatEntries[steamId].Dead++;
-            }
-
-            if (attacker?.AuthorizedSteamID != null && attacker != victim)
-            {
-                var steamId = attacker.AuthorizedSteamID.SteamId2;
-                if (!_playerStatEntries.ContainsKey(steamId))
+                
+                if (!_playerStatEntries.ContainsKey(attackerSteamId))
                 {
-                    _playerStatEntries[steamId] = new PlayerStatEntry(steamId, attacker.PlayerName);
+                    _playerStatEntries[attackerSteamId] = new PlayerStatEntry(attackerSteamId, attacker.PlayerName);
                 }
                 if (attacker.Team == victim.Team)
                 {
-                    _playerStatEntries[steamId].TeamKill++;
+                    _playerStatEntries[attackerSteamId].TeamKill++;
                 }
                 else
                 {
-                    _playerStatEntries[steamId].Kill++;
+                    _playerStatEntries[attackerSteamId].Kill++;
                 }
             }
 
-            if (attacker?.AuthorizedSteamID != null && attacker == victim && !attacker.JustBecameSpectator && !attacker.TeamChanged)
+            if (attackerSteamId is not null && victimSteamId is not null && attackerSteamId == victimSteamId)
             {
-                var steamId = attacker.AuthorizedSteamID.SteamId2;
-                if (!_playerStatEntries.ContainsKey(steamId))
-                {
-                    _playerStatEntries[steamId] = new PlayerStatEntry(steamId, attacker.PlayerName, 0, 0, 0, 0);
+                Server.PrintToChatAll($"attacker == victim");
+                if (victim.JustBecameSpectator) {
+                    Server.PrintToChatAll($"JustBecameSpectator");
                 }
-                _playerStatEntries[steamId].SelfKill++;
+                if (victim.JustDidTeamKill) {
+                    Server.PrintToChatAll($"JustDidTeamKill");
+                }
+                if (victim.TeamChanged)
+                {
+                    Server.PrintToChatAll($"TeamChanged");
+                }
+
+                if (!_playerStatEntries.ContainsKey(victimSteamId))
+                {
+                    _playerStatEntries[victimSteamId] = new PlayerStatEntry(victimSteamId, victim.PlayerName);
+                }
+                _playerStatEntries[victimSteamId].SelfKill++;
             }
 
             return HookResult.Continue;
@@ -167,7 +185,7 @@ namespace GameStatistic
         private static void CreateMapStatisticRoundEnd(int winnerTeam)
         {
             var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
-
+            _mapStatEntry = new KeyValuePair<string, MapStatEntry>(_mapName, new MapStatEntry(_mapName));
             if (winnerTeam == 2)
             {
                 _mapStatEntry.Value.TWin++;
@@ -177,15 +195,15 @@ namespace GameStatistic
                 _mapStatEntry.Value.CTWin++;
             }
 
-            storedStats = MergeStatToStored(storedStats, _mapStatEntry);
-            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
+            MergeStatToStored(storedStats, _mapStatEntry);
+            
         }
 
-        private static Dictionary<string, MapStatEntry>? MergeStatToStored(Dictionary<string, MapStatEntry>? storedStats, KeyValuePair<string, MapStatEntry> mapStatEntry)
+        private static void MergeStatToStored(Dictionary<string, MapStatEntry>? storedStats, KeyValuePair<string, MapStatEntry> mapStatEntry)
         {
             if (string.IsNullOrWhiteSpace(mapStatEntry.Key))
             {
-                return null;
+                return;
             }
 
             storedStats ??= [];
@@ -195,6 +213,7 @@ namespace GameStatistic
                 var existing = storedStats[mapStatEntry.Key];
                 existing.TWin += mapStatEntry.Value.TWin;
                 existing.CTWin += mapStatEntry.Value.CTWin;
+                existing.MapStarted += mapStatEntry.Value.MapStarted;
                 existing.MapFullPlayed += mapStatEntry.Value.MapFullPlayed;
             }
             else
@@ -202,7 +221,7 @@ namespace GameStatistic
                 storedStats[mapStatEntry.Key] = mapStatEntry.Value;
             }
 
-            return storedStats;
+            FileWriteAll<Dictionary<string, MapStatEntry>>(_mapStatFilePath, storedStats);
         }
 
         private static void FileWriteAll<T>(string statFilePath, T? storedStats)
