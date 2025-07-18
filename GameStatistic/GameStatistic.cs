@@ -122,7 +122,7 @@ namespace GameStatistic
             {
                 if (!_playerStatEntries.ContainsKey(assisterSteamId))
                 {
-                    _playerStatEntries[assisterSteamId] = new PlayerStatEntry(assisterSteamId, victim.PlayerName);
+                    _playerStatEntries[assisterSteamId] = new PlayerStatEntry(assisterSteamId, assister.PlayerName);
                 }
                 _playerStatEntries[assisterSteamId].Assister++;
             }
