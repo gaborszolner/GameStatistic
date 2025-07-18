@@ -127,48 +127,39 @@ namespace GameStatistic
                 _playerStatEntries[assisterSteamId].Assister++;
             }
 
-            if (attackerSteamId is not null && victimSteamId is not null && attackerSteamId != victimSteamId)
+            if (attackerSteamId is not null && victimSteamId is not null)
             {
-                if (!_playerStatEntries.ContainsKey(victimSteamId))
+                if (attackerSteamId != victimSteamId)
                 {
-                    _playerStatEntries[victimSteamId] = new PlayerStatEntry(victimSteamId, victim.PlayerName);
-                }
-                _playerStatEntries[victimSteamId].Dead++;
 
-                
-                if (!_playerStatEntries.ContainsKey(attackerSteamId))
-                {
-                    _playerStatEntries[attackerSteamId] = new PlayerStatEntry(attackerSteamId, attacker.PlayerName);
-                }
-                if (attacker.Team == victim.Team)
-                {
-                    _playerStatEntries[attackerSteamId].TeamKill++;
-                }
-                else
-                {
-                    _playerStatEntries[attackerSteamId].Kill++;
-                }
-            }
+                    if (!_playerStatEntries.ContainsKey(victimSteamId))
+                    {
+                        _playerStatEntries[victimSteamId] = new PlayerStatEntry(victimSteamId, victim.PlayerName);
+                    }
+                    _playerStatEntries[victimSteamId].Dead++;
 
-            if (attackerSteamId is not null && victimSteamId is not null && attackerSteamId == victimSteamId)
-            {
-                Server.PrintToChatAll($"attacker == victim");
-                if (victim.JustBecameSpectator) {
-                    Server.PrintToChatAll($"JustBecameSpectator");
-                }
-                if (victim.JustDidTeamKill) {
-                    Server.PrintToChatAll($"JustDidTeamKill");
-                }
-                if (victim.TeamChanged)
-                {
-                    Server.PrintToChatAll($"TeamChanged");
-                }
 
-                if (!_playerStatEntries.ContainsKey(victimSteamId))
-                {
-                    _playerStatEntries[victimSteamId] = new PlayerStatEntry(victimSteamId, victim.PlayerName);
+                    if (!_playerStatEntries.ContainsKey(attackerSteamId))
+                    {
+                        _playerStatEntries[attackerSteamId] = new PlayerStatEntry(attackerSteamId, attacker.PlayerName);
+                    }
+                    if (attacker.Team == victim.Team)
+                    {
+                        _playerStatEntries[attackerSteamId].TeamKill++;
+                    }
+                    else
+                    {
+                        _playerStatEntries[attackerSteamId].Kill++;
+                    }
                 }
-                _playerStatEntries[victimSteamId].SelfKill++;
+                else 
+                {
+                    if (!_playerStatEntries.ContainsKey(victimSteamId))
+                    {
+                        _playerStatEntries[victimSteamId] = new PlayerStatEntry(victimSteamId, victim.PlayerName);
+                    }
+                    _playerStatEntries[victimSteamId].SelfKill++;
+                }
             }
 
             return HookResult.Continue;
