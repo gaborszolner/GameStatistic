@@ -23,7 +23,7 @@ namespace GameStatistic
         private static KeyValuePair<string, MapStatEntry> _mapStatEntry;
         private static bool _isWarmup = false;
         private static bool _isRoundEnded = false;
-        private static string _mapName;
+        private static string _mapName = string.Empty;
         public override void Load(bool hotReload)
         {
             RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
@@ -33,8 +33,15 @@ namespace GameStatistic
             RegisterEventHandler<EventRoundAnnounceFinal>(OnRoundAnnounceFinal);
             RegisterEventHandler<EventRoundAnnounceMatchStart>(OnRoundAnnounceMatchStart);
             RegisterEventHandler<EventRoundAnnounceWarmup>(OnRoundAnnounceWarmup);
+            RegisterEventHandler<EventStartHalftime>(OnStartHalftime);
             _playerStatFilePath = Path.Combine(ModuleDirectory, "playerStatistic.json");
             _mapStatFilePath = Path.Combine(ModuleDirectory, "mapStatistic.json");
+        }
+
+        private HookResult OnStartHalftime(EventStartHalftime @event, GameEventInfo info)
+        {
+            PrintMapStat();
+            return HookResult.Continue;
         }
 
         private HookResult OnRoundAnnounceMatchStart(EventRoundAnnounceMatchStart @event, GameEventInfo info)
@@ -71,23 +78,7 @@ namespace GameStatistic
         private HookResult OnRoundAnnounceWarmup(EventRoundAnnounceWarmup @event, GameEventInfo info)
         {
             _isWarmup = true;
-            _mapName = Server.MapName.Trim() ?? string.Empty;
-            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
-            if(storedStats is not null && storedStats.ContainsKey(_mapName)) 
-            { 
-                int ctWin = storedStats[_mapName].CTWin;
-                int tWin = storedStats[_mapName].TWin;
-                int fullRoundCount = ctWin + tWin;
-
-                double tWinPercentage = (double)tWin / fullRoundCount * 100;
-                double ctWinPercentage = (double)ctWin / fullRoundCount * 100;
-
-                int mapStarted = storedStats[_mapName].MapStarted;
-                int mapFullPlayed = storedStats[_mapName].MapFullPlayed;
-                double rtvPercentage = (double)mapFullPlayed / mapStarted * 100;
-
-                Server.PrintToChatAll($"{ChatColors.Yellow}{PluginPrefix} {ChatColors.Default}- On this map {ChatColors.Red} T win: {tWinPercentage:F2}%, {ChatColors.Blue}CT win: {ctWinPercentage:F2}%, {ChatColors.Green}RTV in {rtvPercentage:F2}%");
-            }
+            PrintMapStat();
 
             return HookResult.Continue;
         }
@@ -171,6 +162,27 @@ namespace GameStatistic
             CreatePlayerStatistic();
             CreateMapStatisticRoundEnd(@event.Winner);
             return HookResult.Continue;
+        }
+
+        private void PrintMapStat()
+        {
+            _mapName = Server.MapName.Trim() ?? string.Empty;
+            var storedStats = ReadStoredStat<Dictionary<string, MapStatEntry>>(_mapStatFilePath);
+            if (storedStats is not null && storedStats.ContainsKey(_mapName))
+            {
+                int ctWin = storedStats[_mapName].CTWin;
+                int tWin = storedStats[_mapName].TWin;
+                int fullRoundCount = ctWin + tWin;
+
+                double tWinPercentage = (double)tWin / fullRoundCount * 100;
+                double ctWinPercentage = (double)ctWin / fullRoundCount * 100;
+
+                int mapStarted = storedStats[_mapName].MapStarted;
+                int mapFullPlayed = storedStats[_mapName].MapFullPlayed;
+                double rtvPercentage = 100 - ((double)mapFullPlayed / mapStarted * 100);
+
+                Server.PrintToChatAll($"{ChatColors.Yellow}{PluginPrefix} {ChatColors.Default}- On this map {ChatColors.Red} T win: {tWinPercentage:F2}%, {ChatColors.Blue}CT win: {ctWinPercentage:F2}%, {ChatColors.Green}RTV in {rtvPercentage:F2}%");
+            }
         }
 
         private static void CreateMapStatisticRoundEnd(int winnerTeam)

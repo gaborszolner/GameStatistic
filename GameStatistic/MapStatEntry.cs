@@ -28,7 +28,5 @@ namespace GameStatistic
             MapStarted = mapStarted;
             MapFullPlayed = mapFullPlayed;
         }
-
-        public MapStatEntry() { }
     }
 }
