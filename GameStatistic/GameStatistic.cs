@@ -1,8 +1,7 @@
 ﻿using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Events;
 using CounterStrikeSharp.API.Modules.Utils;
-using Microsoft.Extensions.Logging;
-using System.Drawing;
 using System.Text.Json;
 
 namespace GameStatistic
@@ -30,12 +29,43 @@ namespace GameStatistic
             RegisterEventHandler<EventRoundStart>(OnRoundStart);
             RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath);
             RegisterEventHandler<EventWarmupEnd>(OnWarmupEnd);
+            RegisterEventHandler<EventPlayerChat>(OnPlayerChat);
             RegisterEventHandler<EventRoundAnnounceFinal>(OnRoundAnnounceFinal);
             RegisterEventHandler<EventRoundAnnounceMatchStart>(OnRoundAnnounceMatchStart);
             RegisterEventHandler<EventRoundAnnounceWarmup>(OnRoundAnnounceWarmup);
             RegisterEventHandler<EventStartHalftime>(OnStartHalftime);
             _playerStatFilePath = Path.Combine(ModuleDirectory, "playerStatistic.json");
             _mapStatFilePath = Path.Combine(ModuleDirectory, "mapStatistic.json");
+        }
+
+        public HookResult OnPlayerChat(EventPlayerChat @event, GameEventInfo info)
+        {
+            var player = Utilities.GetPlayerFromUserid(@event.Userid);
+
+            if (player is null)
+            {
+                return HookResult.Continue;
+            }
+
+            if (@event?.Text.Trim().ToLower() is "!mapstat")
+            {
+                PrintMapStat();
+            }
+            else if (@event?.Text.Trim().ToLower() is "!mystat")
+            {
+                var storedStats =
+                    ReadStoredStat<Dictionary<string, PlayerStatEntry>>(_playerStatFilePath)
+                    ?? [];
+
+                var playerSteamId = player.AuthorizedSteamID?.SteamId2;
+                if (playerSteamId is not null && storedStats.ContainsKey(playerSteamId))
+                {
+                    var playerEntry = storedStats[playerSteamId];
+                    player?.PrintToChat($"Kill:{playerEntry?.Kill}, Dead:{playerEntry?.Dead}, Assist:{playerEntry?.Assister}, SelfKill:{playerEntry?.SelfKill}, TeamKill:{playerEntry?.TeamKill}");
+                }
+            }
+
+            return HookResult.Continue;
         }
 
         private HookResult OnStartHalftime(EventStartHalftime @event, GameEventInfo info)
@@ -243,7 +273,7 @@ namespace GameStatistic
             { }
         }
 
-        private void CreatePlayerStatistic()
+        private static void CreatePlayerStatistic()
         {
             var storedStats =
                 ReadStoredStat<Dictionary<string, PlayerStatEntry>>(_playerStatFilePath) 
